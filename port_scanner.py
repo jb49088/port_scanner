@@ -2,6 +2,27 @@
 # =                                 PORT_SCANNER                                 =
 # ================================================================================
 
+"""
+TCP Packet Structure
+----------------------------------
+Header: 20+ bytes
+  Source Port:              2 bytes
+  Destination Port:         2 bytes
+  Sequence Number:          4 bytes
+  Acknowledgement Number:   4 bytes
+  Data Offset:              4 bits
+  Reserved:                 3 bits
+  Flags:                    9 bits
+  Window Size:              2 bytes
+  Checksum:                 2 bytes
+  Urgent Pointer:           2 bytes
+  Options:                  0–40 bytes
+
+Data: 0+ bytes
+
+Total: 20+ bytes
+"""
+
 import argparse
 import socket
 import subprocess

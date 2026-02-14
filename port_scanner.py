@@ -4,7 +4,7 @@
 
 """
 TCP Packet Structure
-----------------------------------
+--------------------------------------
 Header: 20+ bytes
   Source Port:              2 bytes
   Destination Port:         2 bytes

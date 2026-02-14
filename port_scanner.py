@@ -40,7 +40,7 @@ def port_scanner():
 
     if not is_host_reachable(address):
         print("\nHost unreachable.\n")
-        return False
+        return
 
 
 if __name__ == "__main__":

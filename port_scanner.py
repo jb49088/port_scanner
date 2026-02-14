@@ -63,12 +63,11 @@ def port_scanner():
         print("\nHost unreachable.\n")
         return
 
-    for port in range(1, 1025):
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(0.01)
-        result = sock.connect_ex((address, port))
-        if result == 0:
-            print(f"Port {port} open.")
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
+    except PermissionError:
+        print("\nThis program must be run as root.\n")
+        return
 
 
 if __name__ == "__main__":

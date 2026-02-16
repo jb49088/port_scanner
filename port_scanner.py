@@ -11,9 +11,7 @@ Header: 20+ bytes
   Sequence Number:          4 bytes
   Acknowledgement Number:   4 bytes
   Data Offset:              4 bits
-  Reserved:                 3 bits
-  Nonce Sum:                1 bit
-  Flags:                    8 bits
+  Flags:                    12 bits
   Window Size:              2 bytes
   Checksum:                 2 bytes
   Urgent Pointer:           2 bytes

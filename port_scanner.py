@@ -24,9 +24,11 @@ Total: 20+ bytes
 
 import argparse
 import random
+import select
 import socket
 import struct
 import subprocess
+import time
 
 
 def parse_args():
@@ -157,7 +159,34 @@ def send_packet(sock: socket.socket, header: bytes, destination_ip: str) -> None
     sock.sendto(header, (destination_ip, 0))
 
 
+def receive_packet(sock: socket.socket, timeout: float):
+    time_left = timeout
+    while True:
+        start_select = time.perf_counter()
+        ready = select.select([sock], [], [], time_left)
+        end_select = time.perf_counter() - start_select
+        time_left -= end_select
+
+        if not ready[0]:  # Timeout
+            return None
+
+        packet, _ = sock.recvfrom(65535)
+
+        # Parse packet
+        ip_header = struct.unpack("!BBHHHBBH4s4s", packet[0:20])
+        src_ip = socket.inet_ntoa(ip_header[8])
+        dst_ip = socket.inet_ntoa(ip_header[9])
+
+        tcp_header = struct.unpack("!HHLLBBHHH", packet[20:40])
+        src_port = tcp_header[0]
+        dst_port = tcp_header[1]
+
+        if time_left <= 0:
+            return None
+
+
 def port_scanner():
+    timeout = 0.1
     args = parse_args()
     hostname = args.host
 
@@ -182,6 +211,7 @@ def port_scanner():
     for destination_port in range(1, 1025):
         header = build_header(source_ip, destination_ip, destination_port)
         send_packet(sock, header, destination_ip)
+        packet = receive_packet(sock, timeout)
 
 
 if __name__ == "__main__":

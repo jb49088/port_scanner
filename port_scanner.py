@@ -153,6 +153,10 @@ def calculate_checksum(header: bytes) -> int:
     return total
 
 
+def send_packet(sock: socket.socket, header: bytes, destination_ip: str) -> None:
+    sock.sendto(header, (destination_ip, 0))
+
+
 def port_scanner():
     args = parse_args()
     hostname = args.host
@@ -177,7 +181,7 @@ def port_scanner():
 
     for destination_port in range(1, 1025):
         header = build_header(source_ip, destination_ip, destination_port)
-        sock.sendto(header, (destination_ip, 0))
+        send_packet(sock, header, destination_ip)
 
 
 if __name__ == "__main__":

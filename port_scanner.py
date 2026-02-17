@@ -61,7 +61,9 @@ def get_source_ip(destination_ip: str) -> str:
     return source_ip
 
 
-def build_header(source_ip: str, destination_ip: str, destination_port: int) -> bytes:
+def build_header(
+    source_ip: str, destination_ip: str, destination_port: int
+) -> tuple[int, bytes]:
     source_port = random.randint(49152, 65535)  # Ephemeral ports
     sequence_number = random.randint(0, 4294967295)  # Initial Sequence Number (ISN)
     acknowledgement_number = 0  # Nothing to acknowledge
@@ -134,7 +136,7 @@ def build_header(source_ip: str, destination_ip: str, destination_port: int) -> 
         urgent_pointer,
     )
 
-    return header
+    return source_port, header
 
 
 def calculate_checksum(header: bytes) -> int:
@@ -159,7 +161,14 @@ def send_packet(sock: socket.socket, header: bytes, destination_ip: str) -> None
     sock.sendto(header, (destination_ip, 0))
 
 
-def receive_packet(sock: socket.socket, timeout: float):
+def receive_packet(
+    sock: socket.socket,
+    timeout: float,
+    source_ip: str,
+    destination_ip: str,
+    source_port: int,
+    destination_port: int,
+):
     time_left = timeout
     while True:
         start_select = time.perf_counter()
@@ -172,17 +181,29 @@ def receive_packet(sock: socket.socket, timeout: float):
 
         packet, _ = sock.recvfrom(65535)
 
-        # Parse packet
-        ip_header = struct.unpack("!BBHHHBBH4s4s", packet[0:20])
-        src_ip = socket.inet_ntoa(ip_header[8])
-        dst_ip = socket.inet_ntoa(ip_header[9])
+        src_ip, dst_ip, src_port, dst_port = parse_packet(packet)
 
-        tcp_header = struct.unpack("!HHLLBBHHH", packet[20:40])
-        src_port = tcp_header[0]
-        dst_port = tcp_header[1]
+        # Validate packet
+        if (
+            src_ip == destination_ip
+            and dst_ip == source_ip
+            and src_port == destination_port
+            and dst_port == source_port
+        ):
+            return packet
 
         if time_left <= 0:
             return None
+
+
+def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
+    ip_header = struct.unpack("!BBHHHBBH4s4s", packet[0:20])
+    src_ip, dst_ip = map(socket.inet_ntoa, ip_header[8:10])
+
+    tcp_header = struct.unpack("!HHLLBBHHH", packet[20:40])
+    src_port, dst_port = tcp_header[0:2]
+
+    return src_ip, dst_ip, src_port, dst_port
 
 
 def port_scanner():
@@ -209,9 +230,11 @@ def port_scanner():
         return
 
     for destination_port in range(1, 1025):
-        header = build_header(source_ip, destination_ip, destination_port)
+        source_port, header = build_header(source_ip, destination_ip, destination_port)
         send_packet(sock, header, destination_ip)
-        packet = receive_packet(sock, timeout)
+        packet = receive_packet(
+            sock, timeout, source_ip, destination_ip, source_port, destination_port
+        )
 
 
 if __name__ == "__main__":

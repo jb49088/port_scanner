@@ -206,6 +206,10 @@ def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
     return src_ip, dst_ip, src_port, dst_port
 
 
+def get_flags(packet: bytes):
+    return packet[33]
+
+
 def port_scanner():
     timeout = 0.1
     args = parse_args()
@@ -229,12 +233,21 @@ def port_scanner():
         print("\nThis program must be run as root.\n")
         return
 
+    open_ports = []
     for destination_port in range(1, 1025):
         source_port, header = build_header(source_ip, destination_ip, destination_port)
         send_packet(sock, header, destination_ip)
         packet = receive_packet(
             sock, timeout, source_ip, destination_ip, source_port, destination_port
         )
+        if packet:
+            flags = get_flags(packet)
+
+            if flags & 0x12 == 0x12:  # SYN+ACK
+                open_ports.append(destination_port)
+
+    for port in open_ports:
+        print(f"{destination_ip}:{port} is open.")
 
 
 if __name__ == "__main__":

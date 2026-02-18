@@ -166,7 +166,7 @@ def receive_packet(
     destination_ip: str,
     source_port: int,
     destination_port: int,
-):
+) -> bytes | None:
     time_left = timeout
     while True:
         start_select = time.perf_counter()

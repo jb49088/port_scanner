@@ -33,9 +33,7 @@ import time
 
 def parse_args():
     parser = argparse.ArgumentParser()
-
     parser.add_argument("host", help="Host to scan.")
-
     args = parser.parse_args()
 
     return args

@@ -64,7 +64,7 @@ async def build_header(
     destination_ip: str,
     destination_port: int,
 ) -> tuple[int, bytes]:
-    source_port = random.randint(49152, 65536)
+    source_port = random.randint(49152, 65535)
     sequence_number = random.randint(0, 4294967295)  # Initial Sequence Number (ISN)
     acknowledgement_number = 0  # Nothing to acknowledge
     header_length = 5  # Total header length in 32 bit words

@@ -23,8 +23,8 @@ Total: 20+ bytes
 """
 
 import argparse
+import asyncio
 import random
-import select
 import socket
 import struct
 import subprocess
@@ -59,10 +59,12 @@ def get_source_ip(destination_ip: str) -> str:
     return source_ip
 
 
-def build_header(
-    source_ip: str, destination_ip: str, destination_port: int
+async def build_header(
+    source_ip: str,
+    destination_ip: str,
+    destination_port: int,
 ) -> tuple[int, bytes]:
-    source_port = random.randint(49152, 65535)  # Ephemeral ports
+    source_port = random.randint(49152, 65536)
     sequence_number = random.randint(0, 4294967295)  # Initial Sequence Number (ISN)
     acknowledgement_number = 0  # Nothing to acknowledge
     header_length = 5  # Total header length in 32 bit words
@@ -155,43 +157,55 @@ def calculate_checksum(header: bytes) -> int:
     return total
 
 
-def send_packet(sock: socket.socket, header: bytes, destination_ip: str) -> None:
-    sock.sendto(header, (destination_ip, 0))
-
-
-def receive_packet(
+async def sender(
     sock: socket.socket,
-    timeout: float,
     source_ip: str,
     destination_ip: str,
-    source_port: int,
-    destination_port: int,
-) -> bytes | None:
-    time_left = timeout
-    while True:
-        start_select = time.perf_counter()
-        ready = select.select([sock], [], [], time_left)
-        end_select = time.perf_counter() - start_select
-        time_left -= end_select
+    port_range: tuple[int, int],
+    pending_ports: dict[tuple[int, int], float],
+    done_sending: asyncio.Event,
+) -> None:
+    for destination_port in range(*port_range):
+        source_port, header = await build_header(
+            source_ip, destination_ip, destination_port
+        )
+        pending_ports[(source_port, destination_port)] = time.monotonic()
+        sock.sendto(header, (destination_ip, 0))
+        await asyncio.sleep(0.001)
 
-        if not ready[0]:  # Timeout
-            return None
+    done_sending.set()
 
-        packet, _ = sock.recvfrom(65535)
+
+async def receiver(
+    sock: socket.socket,
+    source_ip: str,
+    destination_ip: str,
+    pending_ports: dict[tuple[int, int], float],
+    open_ports: list[int],
+    done_sending: asyncio.Event,
+    timeout=2,
+) -> None:
+    loop = asyncio.get_running_loop()
+
+    while pending_ports or not done_sending.is_set():
+        packet = await loop.sock_recv(sock, 65535)
 
         src_ip, dst_ip, src_port, dst_port = parse_packet(packet)
 
-        # Validate packet
         if (
             src_ip == destination_ip
             and dst_ip == source_ip
-            and src_port == destination_port
-            and dst_port == source_port
+            and (dst_port, src_port) in pending_ports
         ):
-            return packet
+            flags = packet[33]
+            if flags & 0x12 == 0x12:  # SYN, ACK
+                open_ports.append(src_port)
+            del pending_ports[(dst_port, src_port)]
 
-        if time_left <= 0:
-            return None
+        now = time.monotonic()
+        for k, v in list(pending_ports.items()):
+            if now - v > timeout:
+                del pending_ports[k]
 
 
 def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
@@ -204,14 +218,10 @@ def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
     return src_ip, dst_ip, src_port, dst_port
 
 
-def get_flags(packet: bytes):
-    return packet[33]
-
-
-def port_scanner():
-    timeout = 0.1
+async def port_scanner():
     args = parse_args()
     hostname = args.host
+    port_range = (1, 1024)
 
     try:
         destination_ip = socket.gethostbyname(hostname)
@@ -231,22 +241,24 @@ def port_scanner():
         print("\nThis program must be run as root.\n")
         return
 
-    open_ports = []
-    for destination_port in range(1, 1025):
-        source_port, header = build_header(source_ip, destination_ip, destination_port)
-        send_packet(sock, header, destination_ip)
-        packet = receive_packet(
-            sock, timeout, source_ip, destination_ip, source_port, destination_port
-        )
-        if packet:
-            flags = get_flags(packet)
+    sock.setblocking(False)
 
-            if flags & 0x12 == 0x12:  # SYN+ACK
-                open_ports.append(destination_port)
+    open_ports = []
+    pending_ports = {}
+    done_sending = asyncio.Event()
+
+    await asyncio.gather(
+        sender(
+            sock, source_ip, destination_ip, port_range, pending_ports, done_sending
+        ),
+        receiver(
+            sock, source_ip, destination_ip, pending_ports, open_ports, done_sending
+        ),
+    )
 
     for port in open_ports:
-        print(f"{destination_ip}:{port} is open.")
+        print(f"{destination_ip}:{port} is open")
 
 
 if __name__ == "__main__":
-    port_scanner()
+    asyncio.run(port_scanner())

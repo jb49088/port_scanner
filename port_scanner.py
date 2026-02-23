@@ -188,7 +188,14 @@ async def receiver(
     loop = asyncio.get_running_loop()
 
     while pending_ports or not done_sending.is_set():
-        packet = await loop.sock_recv(sock, 65535)
+        try:
+            packet = await asyncio.wait_for(loop.sock_recv(sock, 65535), 0.01)
+        except asyncio.TimeoutError:
+            now = time.monotonic()
+            for k, v in list(pending_ports.items()):
+                if now - v > timeout:
+                    del pending_ports[k]
+            continue
 
         src_ip, dst_ip, src_port, dst_port = parse_packet(packet)
 

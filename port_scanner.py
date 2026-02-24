@@ -28,15 +28,48 @@ import random
 import socket
 import struct
 import subprocess
+import sys
 import time
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("host", help="Host to scan.")
+    parser.add_argument(
+        "-p", "--ports", nargs="+", default=["1-1024"], help="Ports to scan."
+    )
     args = parser.parse_args()
 
     return args
+
+
+def expand_ports(port_args: list) -> set[int]:
+    ports = set()
+    for token in port_args:
+        if "-" in token:
+            start, end = token.split("-")
+            breakpoint()
+            if not (start.isdigit() and end.isdigit()):
+                raise ValueError("Invalid format. Use: 80, 1-1024")
+            start, end = int(start), int(end)
+            if not (1 <= start <= 65535 and 1 <= end <= 65535):
+                raise ValueError(
+                    f"Invalid port range {start}-{end}. Ports must be between 1 and 65535."
+                )
+            if start > end:
+                raise ValueError(
+                    f"Invalid port range {start}-{end}. Start port must be less than or equal to end port."
+                )
+            ports.update(range(start, end + 1))
+        else:
+            port = int(token)
+            if not (1 <= port <= 65535):
+                raise ValueError(
+                    f"Invalid port {port}. Ports must be between 1 and 65535."
+                )
+            ports.add(port)
+
+    return ports
 
 
 def is_host_reachable(address: str):
@@ -161,11 +194,11 @@ async def sender(
     sock: socket.socket,
     source_ip: str,
     destination_ip: str,
-    port_range: tuple[int, int],
+    ports: set[int],
     pending_ports: dict[tuple[int, int], float],
     done_sending: asyncio.Event,
 ) -> None:
-    for destination_port in range(*port_range):
+    for destination_port in ports:
         source_port, header = await build_header(
             source_ip, destination_ip, destination_port
         )
@@ -228,17 +261,22 @@ def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
 async def port_scanner():
     args = parse_args()
     hostname = args.host
-    port_range = (1, 1024)
+
+    try:
+        ports = expand_ports(args.ports)
+    except ValueError as e:
+        print(f"{e}")
+        sys.exit(1)
 
     try:
         destination_ip = socket.gethostbyname(hostname)
     except socket.gaierror:
         print("\nAddress resolution failed.\n")
-        return
+        sys.exit(1)
 
     if not is_host_reachable(destination_ip):
         print("\nHost unreachable.\n")
-        return
+        sys.exit(1)
 
     source_ip = get_source_ip(destination_ip)
 
@@ -246,7 +284,7 @@ async def port_scanner():
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     except PermissionError:
         print("\nThis program must be run as root.\n")
-        return
+        sys.exit(1)
 
     sock.setblocking(False)
 
@@ -255,9 +293,7 @@ async def port_scanner():
     done_sending = asyncio.Event()
 
     await asyncio.gather(
-        sender(
-            sock, source_ip, destination_ip, port_range, pending_ports, done_sending
-        ),
+        sender(sock, source_ip, destination_ip, ports, pending_ports, done_sending),
         receiver(
             sock, source_ip, destination_ip, pending_ports, open_ports, done_sending
         ),

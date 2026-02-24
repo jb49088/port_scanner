@@ -53,18 +53,18 @@ def expand_ports(port_args: list) -> set[int]:
             start, end = int(start), int(end)
             if not (1 <= start <= 65535 and 1 <= end <= 65535):
                 raise ValueError(
-                    f"Invalid port range {start}-{end}. Ports must be between 1 and 65535."
+                    f"\nInvalid port range {start}-{end}. Ports must be between 1 and 65535.\n"
                 )
             if start > end:
                 raise ValueError(
-                    f"Invalid port range {start}-{end}. Start port must be less than or equal to end port."
+                    f"\nInvalid port range {start}-{end}. Start port must be less than or equal to end port.\n"
                 )
             ports.update(range(start, end + 1))
         else:
             port = int(token)
             if not (1 <= port <= 65535):
                 raise ValueError(
-                    f"Invalid port {port}. Ports must be between 1 and 65535."
+                    f"\nInvalid port {port}. Ports must be between 1 and 65535.\n"
                 )
             ports.add(port)
 

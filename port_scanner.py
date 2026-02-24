@@ -256,33 +256,23 @@ def parse_packet(packet: bytes) -> tuple[str, str, int, int]:
     return src_ip, dst_ip, src_port, dst_port
 
 
-async def port_scanner():
-    args = parse_args()
-    hostname = args.host
+async def run_scan(args: argparse.Namespace) -> tuple[list[int], str]:
+    ports = expand_ports(args.ports)
 
     try:
-        ports = expand_ports(args.ports)
-    except ValueError as e:
-        print(f"{e}")
-        sys.exit(1)
-
-    try:
-        destination_ip = socket.gethostbyname(hostname)
+        destination_ip = socket.gethostbyname(args.host)
     except socket.gaierror:
-        print("\nAddress resolution failed.\n")
-        sys.exit(1)
+        raise RuntimeError("\nAddress resolution failed.\n")
 
     if not is_host_reachable(destination_ip):
-        print("\nHost unreachable.\n")
-        sys.exit(1)
+        raise RuntimeError("\nHost unreachable\n")
 
     source_ip = get_source_ip(destination_ip)
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     except PermissionError:
-        print("\nThis program must be run as root.\n")
-        sys.exit(1)
+        raise RuntimeError("\nThis program must be run as root.\n")
 
     sock.setblocking(False)
 
@@ -297,8 +287,20 @@ async def port_scanner():
         ),
     )
 
+    return open_ports, destination_ip
+
+
+async def port_scanner():
+    try:
+        open_ports, destination_ip = await run_scan(parse_args())
+    except (ValueError, RuntimeError) as e:
+        print(e)
+        sys.exit(1)
+
     for port in open_ports:
-        print(f"{destination_ip}:{port} is open")
+        print(f"\nOpen ports on host {destination_ip}:\n")
+        print(port)
+        print()
 
 
 if __name__ == "__main__":

@@ -48,7 +48,6 @@ def expand_ports(port_args: list) -> set[int]:
     for token in port_args:
         if "-" in token:
             start, end = token.split("-")
-            breakpoint()
             if not (start.isdigit() and end.isdigit()):
                 raise ValueError("Invalid format. Use: 80, 1-1024")
             start, end = int(start), int(end)

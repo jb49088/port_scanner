@@ -306,10 +306,13 @@ async def port_scanner():
         print(e)
         sys.exit(1)
 
-    for port in open_ports:
+    if open_ports:
         print(f"\nOpen ports on host {destination_ip}:\n")
-        print(port)
+        for port in sorted(open_ports):
+            print(port)
         print()
+    else:
+        print(f"\nNo open ports on host {destination_ip}\n")
 
 
 if __name__ == "__main__":

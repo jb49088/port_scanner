@@ -27,7 +27,6 @@ import asyncio
 import random
 import socket
 import struct
-import subprocess
 import sys
 import time
 
@@ -71,11 +70,19 @@ def expand_ports(port_args: list) -> set[int]:
     return ports
 
 
-def is_host_reachable(address: str):
-    result = subprocess.run(
-        ["ping", "-c", "1", "-w", "1", address], capture_output=True
+async def is_host_reachable(address: str):
+    result = await asyncio.create_subprocess_exec(
+        "ping",
+        "-c",
+        "1",
+        "-w",
+        "1",
+        address,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
     )
 
+    await result.wait()
     if result.returncode != 0:
         return False
 
@@ -83,12 +90,11 @@ def is_host_reachable(address: str):
 
 
 def get_source_ip(destination_ip: str) -> str:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.connect((destination_ip, 0))
-    source_ip = sock.getsockname()[0]
-    sock.close()
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        sock.connect((destination_ip, 0))
+        source_ip = sock.getsockname()[0]
 
-    return source_ip
+        return source_ip
 
 
 def build_header(
@@ -260,34 +266,37 @@ async def run_scan(args: argparse.Namespace) -> tuple[list[int], str]:
     ports = expand_ports(args.ports)
 
     try:
-        destination_ip = socket.gethostbyname(args.host)
+        result = await asyncio.get_event_loop().getaddrinfo(args.host, 0)
     except socket.gaierror:
         raise RuntimeError("\nAddress resolution failed.\n")
 
-    if not is_host_reachable(destination_ip):
+    destination_ip = result[0][4][0]
+
+    if not await is_host_reachable(destination_ip):
         raise RuntimeError("\nHost unreachable\n")
 
-    source_ip = get_source_ip(destination_ip)
+    source_ip = await asyncio.to_thread(get_source_ip, destination_ip)
 
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_TCP)
     except PermissionError:
         raise RuntimeError("\nThis program must be run as root.\n")
 
-    sock.setblocking(False)
+    with sock:
+        sock.setblocking(False)
 
-    open_ports = []
-    pending_ports = {}
-    done_sending = asyncio.Event()
+        open_ports = []
+        pending_ports = {}
+        done_sending = asyncio.Event()
 
-    await asyncio.gather(
-        sender(sock, source_ip, destination_ip, ports, pending_ports, done_sending),
-        receiver(
-            sock, source_ip, destination_ip, pending_ports, open_ports, done_sending
-        ),
-    )
+        await asyncio.gather(
+            sender(sock, source_ip, destination_ip, ports, pending_ports, done_sending),
+            receiver(
+                sock, source_ip, destination_ip, pending_ports, open_ports, done_sending
+            ),
+        )
 
-    return open_ports, destination_ip
+        return open_ports, destination_ip
 
 
 async def port_scanner():

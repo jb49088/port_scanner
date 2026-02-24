@@ -189,6 +189,13 @@ def calculate_checksum(header: bytes) -> int:
     return total
 
 
+def expire_pending_ports(pending_ports: dict[tuple[int, int], float], timeout: int):
+    now = time.monotonic()
+    for k, v in list(pending_ports.items()):
+        if now - v > timeout:
+            del pending_ports[k]
+
+
 async def sender(
     sock: socket.socket,
     source_ip: str,
@@ -213,7 +220,7 @@ async def receiver(
     pending_ports: dict[tuple[int, int], float],
     open_ports: list[int],
     done_sending: asyncio.Event,
-    timeout=2,
+    timeout: int = 2,
 ) -> None:
     loop = asyncio.get_running_loop()
 
@@ -221,10 +228,7 @@ async def receiver(
         try:
             packet = await asyncio.wait_for(loop.sock_recv(sock, 65535), 0.01)
         except asyncio.TimeoutError:
-            now = time.monotonic()
-            for k, v in list(pending_ports.items()):
-                if now - v > timeout:
-                    del pending_ports[k]
+            expire_pending_ports(pending_ports, timeout)
             continue
 
         src_ip, dst_ip, src_port, dst_port = parse_packet(packet)
@@ -239,10 +243,7 @@ async def receiver(
                 open_ports.append(src_port)
             del pending_ports[(dst_port, src_port)]
 
-        now = time.monotonic()
-        for k, v in list(pending_ports.items()):
-            if now - v > timeout:
-                del pending_ports[k]
+        expire_pending_ports(pending_ports, timeout)
 
 
 def parse_packet(packet: bytes) -> tuple[str, str, int, int]:

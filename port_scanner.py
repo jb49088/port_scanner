@@ -91,7 +91,7 @@ def get_source_ip(destination_ip: str) -> str:
     return source_ip
 
 
-async def build_header(
+def build_header(
     source_ip: str,
     destination_ip: str,
     destination_port: int,
@@ -198,9 +198,7 @@ async def sender(
     done_sending: asyncio.Event,
 ) -> None:
     for destination_port in ports:
-        source_port, header = await build_header(
-            source_ip, destination_ip, destination_port
-        )
+        source_port, header = build_header(source_ip, destination_ip, destination_port)
         pending_ports[(source_port, destination_port)] = time.monotonic()
         sock.sendto(header, (destination_ip, 0))
         await asyncio.sleep(0.001)

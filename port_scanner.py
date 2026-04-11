@@ -102,7 +102,7 @@ def build_header(
     destination_ip: str,
     destination_port: int,
 ) -> tuple[int, bytes]:
-    source_port = random.randint(49152, 65535)
+    source_port = random.randint(1024, 65535)
     sequence_number = random.randint(0, 4294967295)  # Initial Sequence Number (ISN)
     acknowledgement_number = 0  # Nothing to acknowledge
     header_length = 5  # Total header length in 32 bit words
@@ -195,7 +195,9 @@ def calculate_checksum(header: bytes) -> int:
     return total
 
 
-def expire_pending_ports(pending_ports: dict[tuple[int, int], float], timeout: int):
+def expire_pending_ports(
+    pending_ports: dict[tuple[int, int], float], timeout: int
+) -> None:
     now = time.monotonic()
     for k, v in list(pending_ports.items()):
         if now - v > timeout:
@@ -213,8 +215,14 @@ async def sender(
     for destination_port in ports:
         source_port, header = build_header(source_ip, destination_ip, destination_port)
         pending_ports[(source_port, destination_port)] = time.monotonic()
-        sock.sendto(header, (destination_ip, 0))
-        await asyncio.sleep(0.001)
+
+        try:
+            sock.sendto(header, (destination_ip, 0))
+        except OSError:
+            await asyncio.sleep(0)
+
+        # sock.sendto(header, (destination_ip, 0))
+        # await asyncio.sleep(0.000005)
 
     done_sending.set()
 
